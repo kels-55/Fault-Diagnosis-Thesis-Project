@@ -1,0 +1,441 @@
+# Node kinds:
+#   fault       : F_* nodes (components, cables, lamp)
+#   voltage     : V_* nodes (voltage propagation)
+#   observable  : O_* nodes (LEDs, lamp states)
+#   measurement : M_* nodes (multimeter readings)
+
+nodes:
+  # Fault nodes
+  - { name: F_PSU_short,  kind: fault }
+  - { name: F_battery,    kind: fault }
+  - { name: F_cable_1,    kind: fault }
+  - { name: F_cable_2,    kind: fault }
+  - { name: F_cable_3,    kind: fault }
+  - { name: F_cable_4,    kind: fault }
+  - { name: F_cable_5,    kind: fault }
+  - { name: F_cable_6,    kind: fault }
+  - { name: F_cable_7,    kind: fault }
+  - { name: F_cable_8,    kind: fault }
+  - { name: F_cable_load, kind: fault }
+  - { name: F_sw_1,       kind: fault }
+  - { name: F_sw_2,       kind: fault }
+  - { name: F_sw_3,       kind: fault }
+  - { name: F_sw_4,       kind: fault }
+  - { name: F_sw_5,       kind: fault }
+  - { name: F_sw_6,       kind: fault }
+  - { name: F_sw_7,       kind: fault }
+  - { name: F_sw_8,       kind: fault }
+  - { name: F_lamp,       kind: fault }
+
+  # Voltage chain V_0..V_8 (Boolean abstraction)
+  - { name: V_0, kind: voltage }
+  - { name: V_1, kind: voltage }
+  - { name: V_2, kind: voltage }
+  - { name: V_3, kind: voltage }
+  - { name: V_4, kind: voltage }
+  - { name: V_5, kind: voltage }
+  - { name: V_6, kind: voltage }
+  - { name: V_7, kind: voltage }
+  - { name: V_8, kind: voltage }
+
+  # LED / lamp observables
+  - { name: O_PSU_LED,        kind: observable }
+  - { name: O_Ind_1,          kind: observable }
+  - { name: O_Ind_2,          kind: observable }
+  - { name: O_Ind_3,          kind: observable }
+  - { name: O_Ind_4,          kind: observable }
+  - { name: O_Ind_5,          kind: observable }
+  - { name: O_Ind_6,          kind: observable }
+  - { name: O_Ind_7,          kind: observable }
+  - { name: O_Ind_8,          kind: observable }
+  - { name: O_Lamp,           kind: observable }
+  - { name: O_Lamp_indicator, kind: observable }
+
+  # Multimeter observables
+  - { name: M_PSU_short, kind: measurement }
+  - { name: M_battery,   kind: measurement }
+  - { name: M_mod_1,     kind: measurement }
+  - { name: M_mod_2,     kind: measurement }
+  - { name: M_mod_3,     kind: measurement }
+  - { name: M_mod_4,     kind: measurement }
+  - { name: M_mod_5,     kind: measurement }
+  - { name: M_mod_6,     kind: measurement }
+  - { name: M_mod_7,     kind: measurement }
+  - { name: M_mod_8,     kind: measurement }
+
+
+relationships:
+
+  # ── Voltage chain ────────────────────────────────────────────────────────
+
+  - child:   V_0
+    parents: [F_PSU_short, F_battery]
+    type:    deterministic
+    # Active iff PSU is not shorted AND battery is not exhausted
+    formula: "AND(NOT(F_PSU_short), NOT(F_battery))"
+
+  - child:   V_1
+    parents: [V_0, F_cable_1, F_sw_1]
+    type:    deterministic
+    formula: "AND(V_0, NOT(F_cable_1), NOT(F_sw_1))"
+
+  - child:   V_2
+    parents: [V_1, F_cable_2, F_sw_2]
+    type:    deterministic
+    formula: "AND(V_1, NOT(F_cable_2), NOT(F_sw_2))"
+
+  - child:   V_3
+    parents: [V_2, F_cable_3, F_sw_3]
+    type:    deterministic
+    formula: "AND(V_2, NOT(F_cable_3), NOT(F_sw_3))"
+
+  - child:   V_4
+    parents: [V_3, F_cable_4, F_sw_4]
+    type:    deterministic
+    formula: "AND(V_3, NOT(F_cable_4), NOT(F_sw_4))"
+
+  - child:   V_5
+    parents: [V_4, F_cable_5, F_sw_5]
+    type:    deterministic
+    formula: "AND(V_4, NOT(F_cable_5), NOT(F_sw_5))"
+
+  - child:   V_6
+    parents: [V_5, F_cable_6, F_sw_6]
+    type:    deterministic
+    formula: "AND(V_5, NOT(F_cable_6), NOT(F_sw_6))"
+
+  - child:   V_7
+    parents: [V_6, F_cable_7, F_sw_7]
+    type:    deterministic
+    formula: "AND(V_6, NOT(F_cable_7), NOT(F_sw_7))"
+
+  - child:   V_8
+    parents: [V_7, F_cable_8, F_sw_8]
+    type:    deterministic
+    formula: "AND(V_7, NOT(F_cable_8), NOT(F_sw_8))"
+
+  - child:   O_PSU_LED
+    parents: [F_battery]
+    type:    deterministic
+    # On iff battery is good (PSU LED is wired directly in parallel with battery)
+    formula: "NOT(F_battery)"
+
+  - child:   O_Ind_1
+    parents: [V_1]
+    type:    deterministic
+    formula: "V_1"
+
+  - child:   O_Ind_2
+    parents: [V_2]
+    type:    deterministic
+    formula: "V_2"
+
+  - child:   O_Ind_3
+    parents: [V_3]
+    type:    deterministic
+    formula: "V_3"
+
+  - child:   O_Ind_4
+    parents: [V_4]
+    type:    deterministic
+    formula: "V_4"
+
+  - child:   O_Ind_5
+    parents: [V_5]
+    type:    deterministic
+    formula: "V_5"
+
+  - child:   O_Ind_6
+    parents: [V_6]
+    type:    deterministic
+    formula: "V_6"
+
+  - child:   O_Ind_7
+    parents: [V_7]
+    type:    deterministic
+    formula: "V_7"
+
+  - child:   O_Ind_8
+    parents: [V_8]
+    type:    deterministic
+    formula: "V_8"
+
+  - child:   O_Lamp
+    parents: [V_8, F_cable_load, F_lamp]
+    type:    deterministic
+    # On iff voltage reaches load AND cable to load is ok AND lamp is ok
+    formula: "AND(V_8, NOT(F_cable_load), NOT(F_lamp))"
+
+  - child:   O_Lamp_indicator
+    parents: [V_8, F_cable_load]
+    type:    deterministic
+    # On iff voltage reaches load AND cable to load is ok (independent of lamp filament)
+    formula: "AND(V_8, NOT(F_cable_load))"
+
+  # ── Measurement nodes ────────────────────────────────────────────────────
+
+  - child:   M_PSU_short
+    parents: [F_PSU_short]
+    type:    deterministic
+    # Reads "high" resistance when PSU is shorted (active = short present)
+    formula: "NOT(F_PSU_short)"
+
+  - child:   M_battery
+    parents: [F_battery]
+    type:    deterministic
+    # Reads 12V when battery is good, 0V when exhausted
+    formula: "NOT(F_battery)"
+
+  - child:   M_mod_1
+    parents: [V_1]
+    type:    deterministic
+    formula: "V_1"
+
+  - child:   M_mod_2
+    parents: [V_2]
+    type:    deterministic
+    formula: "V_2"
+
+  - child:   M_mod_3
+    parents: [V_3]
+    type:    deterministic
+    formula: "V_3"
+
+  - child:   M_mod_4
+    parents: [V_4]
+    type:    deterministic
+    formula: "V_4"
+
+  - child:   M_mod_5
+    parents: [V_5]
+    type:    deterministic
+    formula: "V_5"
+
+  - child:   M_mod_6
+    parents: [V_6]
+    type:    deterministic
+    formula: "V_6"
+
+  - child:   M_mod_7
+    parents: [V_7]
+    type:    deterministic
+    formula: "V_7"
+
+  - child:   M_mod_8
+    parents: [V_8]
+    type:    deterministic
+    formula: "V_8"
+
+possible_dependencies:
+  - condition_node: F_PSU_short
+    condition_value: true
+    dependent_node: F_battery
+    possible_value: true
+    note: >
+      A PSU short can violently discharge the battery (scenario 14 mechanism).
+      Battery exhaustion is possible given a PSU short, but not necessary.
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+agents:
+
+  - name: technician_no_multimeter
+    tools: []
+    observes:
+      - O_PSU_LED
+      - O_Ind_1
+      - O_Ind_2
+      - O_Ind_3
+      - O_Ind_4
+      - O_Ind_5
+      - O_Ind_6
+      - O_Ind_7
+      - O_Ind_8
+      - O_Lamp
+      - O_Lamp_indicator
+
+  - name: technician_multimeter
+    tools: [multimeter]
+    observes:
+      - O_PSU_LED
+      - O_Ind_1
+      - O_Ind_2
+      - O_Ind_3
+      - O_Ind_4
+      - O_Ind_5
+      - O_Ind_6
+      - O_Ind_7
+      - O_Ind_8
+      - O_Lamp
+      - O_Lamp_indicator
+      - M_PSU_short
+      - M_battery
+      - M_mod_1
+      - M_mod_2
+      - M_mod_3
+      - M_mod_4
+      - M_mod_5
+      - M_mod_6
+      - M_mod_7
+      - M_mod_8
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCENARIOS
+#
+# Each scenario has:
+#   id            : integer identifier
+#   description   : human-readable label
+#   tools_in_hand : list of tools the technician has (determines which agent is used)
+#   announcements : ordered list of announcement steps
+#     Each step is a list of observation strings: "NODE = value"
+#     Allowed values:
+#       on / off          for O_* nodes
+#       12V / 0V          for M_battery, M_mod_N
+#       high / low        for M_PSU_short
+#
+# The loader normalises all announcement keys to announcement_N (integer N).
+# ─────────────────────────────────────────────────────────────────────────────
+
+scenarios:
+
+  # ── Scenario 7: Battery exhausted ─────────────────────────────────────
+  # Ground truth: F_battery is faulty.
+  # Technician has multimeter. PSU LED is off, all module voltages read 0V,
+  # all indicator LEDs are off, lamp is off.
+  - id: 7
+    description: "Battery exhausted – all voltage absent"
+    tools_in_hand: [multimeter]
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = off"
+          - "M_PSU_short = high"
+          - "M_battery = 0V"
+          - "M_mod_1 = 0V"
+          - "M_mod_2 = 0V"
+          - "M_mod_3 = 0V"
+          - "M_mod_4 = 0V"
+          - "M_mod_5 = 0V"
+          - "M_mod_6 = 0V"
+          - "M_mod_7 = 0V"
+          - "M_mod_8 = 0V"
+      - step: 2
+        observations:
+          - "O_Ind_1 = off"
+          - "O_Ind_2 = off"
+          - "O_Ind_3 = off"
+          - "O_Ind_4 = off"
+          - "O_Ind_5 = off"
+          - "O_Ind_6 = off"
+          - "O_Ind_7 = off"
+          - "O_Ind_8 = off"
+      - step: 3
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
+
+  # ── Scenario 8: Switch 3 detached, all LEDs present ───────────────────
+  # Ground truth: F_sw_3 (or F_cable_3 – ambiguous without multimeter).
+  # Technician has no multimeter. PSU LED on, indicators 1-2 on, 3-8 off.
+  - id: 8
+    description: "ctrl_3 detached – LEDs present, no multimeter"
+    tools_in_hand: [multimeter]
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = on"
+          - "O_Ind_1 = on"
+          - "O_Ind_2 = on"
+          - "M_battery = 12V"
+          - "M_PSU_short = high"
+      - step: 2
+        observations:
+          - "O_Ind_3 = off"
+          - "O_Ind_4 = off"
+          - "O_Ind_5 = off"
+          - "O_Ind_6 = off"
+          - "O_Ind_7 = off"
+          - "O_Ind_8 = off"
+      - step: 3
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
+
+  # ── Scenario 9: Switch 3 detached, LEDs removed, multimeter present ───
+  # Ground truth: F_sw_3. Multimeter confirms voltage present up to mod_2,
+  # absent from mod_3 onward. Distinguishes F_sw_3 from F_cable_3.
+  - id: 9
+    description: "ctrl_3 detached – LEDs removed, multimeter present"
+    tools_in_hand: [multimeter]
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = on"
+          - "M_battery = 12V"
+          - "M_PSU_short = high"
+      - step: 2
+        observations:
+          - "M_mod_1 = 12V"
+          - "M_mod_2 = 12V"
+          - "M_mod_3 = 0V"
+          - "M_mod_4 = 0V"
+          - "M_mod_5 = 0V"
+          - "M_mod_6 = 0V"
+          - "M_mod_7 = 0V"
+          - "M_mod_8 = 0V"
+      - step: 3
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
+
+  # ── Scenario 11: No multimeter, minimal evidence ──────────────────────
+  # Ground truth unknown. Lamp is off, PSU LED is on.
+  # Posterior should be roughly uniform over all switch and cable faults.
+  - id: 11
+    description: "Minimal evidence – no multimeter, lamp off only"
+    tools_in_hand: []
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = on"
+      - step: 2
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
+
+  # ── Scenario 14: PSU short (battery also exhausted) ───────────────────
+  # Ground truth: F_PSU_short (which also causes F_battery via discharge).
+  # M_PSU_short = high is the distinguishing observation vs scenario 7.
+  - id: 14
+    description: "PSU short – battery discharged by short circuit"
+    tools_in_hand: [multimeter]
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = off"
+          - "M_battery = 0V"
+          - "M_mod_1 = 0V"
+          - "M_mod_2 = 0V"
+          - "M_mod_3 = 0V"
+          - "M_mod_4 = 0V"
+          - "M_mod_5 = 0V"
+          - "M_mod_6 = 0V"
+          - "M_mod_7 = 0V"
+          - "M_mod_8 = 0V"
+          - "M_PSU_short = low"
+      - step: 2
+        observations:
+          - "O_Ind_1 = off"
+          - "O_Ind_2 = off"
+          - "O_Ind_3 = off"
+          - "O_Ind_4 = off"
+          - "O_Ind_5 = off"
+          - "O_Ind_6 = off"
+          - "O_Ind_7 = off"
+          - "O_Ind_8 = off"
+      - step: 3
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
+
