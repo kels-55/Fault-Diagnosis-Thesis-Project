@@ -15,10 +15,6 @@ from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Circuit structure classes  (populated by loader.py from circuit.yaml)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class Node:
     """A single node in the circuit DAG."""
 
@@ -59,10 +55,6 @@ class PossibleDependency:
     In modal logic terms:
       Relationship        →  □ (child follows necessarily from parents)
       PossibleDependency  →  ◇ (dependent is possible given condition)
-
-    Example:
-      F_PSU_short = True  →  ◇ F_battery = True
-      "A PSU short makes battery exhaustion possible, but not certain."
     """
 
     def __init__(

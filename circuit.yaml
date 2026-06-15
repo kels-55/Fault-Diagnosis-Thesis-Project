@@ -117,7 +117,6 @@ relationships:
   - child:   O_PSU_LED
     parents: [F_battery]
     type:    deterministic
-    # On iff battery is good (PSU LED is wired directly in parallel with battery)
     formula: "NOT(F_battery)"
 
   - child:   O_Ind_1
@@ -163,27 +162,21 @@ relationships:
   - child:   O_Lamp
     parents: [V_8, F_cable_load, F_lamp]
     type:    deterministic
-    # On iff voltage reaches load AND cable to load is ok AND lamp is ok
     formula: "AND(V_8, NOT(F_cable_load), NOT(F_lamp))"
 
   - child:   O_Lamp_indicator
     parents: [V_8, F_cable_load]
     type:    deterministic
-    # On iff voltage reaches load AND cable to load is ok (independent of lamp filament)
     formula: "AND(V_8, NOT(F_cable_load))"
-
-  # ── Measurement nodes ────────────────────────────────────────────────────
 
   - child:   M_PSU_short
     parents: [F_PSU_short]
     type:    deterministic
-    # Reads "high" resistance when PSU is shorted (active = short present)
     formula: "NOT(F_PSU_short)"
 
   - child:   M_battery
     parents: [F_battery]
     type:    deterministic
-    # Reads 12V when battery is good, 0V when exhausted
     formula: "NOT(F_battery)"
 
   - child:   M_mod_1
@@ -234,9 +227,6 @@ possible_dependencies:
     note: >
       A PSU short can violently discharge the battery (scenario 14 mechanism).
       Battery exhaustion is possible given a PSU short, but not necessary.
-# ─────────────────────────────────────────────────────────────────────────────
-# AGENTS
-# ─────────────────────────────────────────────────────────────────────────────
 
 agents:
 
@@ -298,11 +288,6 @@ agents:
 # ─────────────────────────────────────────────────────────────────────────────
 
 scenarios:
-
-  # ── Scenario 7: Battery exhausted ─────────────────────────────────────
-  # Ground truth: F_battery is faulty.
-  # Technician has multimeter. PSU LED is off, all module voltages read 0V,
-  # all indicator LEDs are off, lamp is off.
   - id: 7
     description: "Battery exhausted – all voltage absent"
     tools_in_hand: [multimeter]
