@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+title: "Dynamic Epistemic Logic for Fault Diagnosis in Cyber-Physical Systems"
+authors:
+  - family-names: "Yu"
+    given-names: "Kelly"
+year: 2026
+message: "Please cite this repository and the accompanying thesis if you use this repository."

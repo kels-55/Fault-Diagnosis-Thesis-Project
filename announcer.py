@@ -1,16 +1,4 @@
-# announcer.py
-# Implements Public Announcement Logic (PAL) world pruning.
-#
-# For each announcement step in a scenario, the AnnouncementProcessor:
-#   1. Validates that all axioms are observable by the scenario's agent.
-#   2. Marks worlds that violate any axiom as dead (world.alive = False).
-#   3. Updates the accessibility relation for the agent.
-#   4. Returns a structured StepResult for display / logging.
-#
-# Usage:
-#   from announcer import AnnouncementProcessor
-#   processor = AnnouncementProcessor(kripke, engine, scenario)
-#   results = processor.run()
+# implements world pruning after each announcement
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -20,10 +8,7 @@ from classes import (
 )
 from translator import AxiomEngine
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Result dataclass
-# ─────────────────────────────────────────────────────────────────────────────
+# result dataclass
 
 @dataclass
 class StepResult:
@@ -37,8 +22,8 @@ class StepResult:
     worlds_before       : alive worlds BEFORE this announcement
     worlds_after        : alive worlds AFTER this announcement (surviving)
     pruned_worlds       : worlds eliminated by this announcement
-    surviving_faults    : fault_node values of surviving worlds
-                          (None entries = all-ok world, if included)
+    surviving_faults    : fault_nodes (frozenset) of surviving worlds
+                          ← was list[str | None], now list[frozenset[str]]
     is_resolved         : True when exactly one world survives
     is_contradiction    : True when zero worlds survive
     """
@@ -47,34 +32,33 @@ class StepResult:
     worlds_before: list[World]
     worlds_after: list[World]
     pruned_worlds: list[World]
-    surviving_faults: list[str | None]
+    surviving_faults: list[frozenset[str]]   # ← changed from list[str | None]
     is_resolved: bool
     is_contradiction: bool
 
     def summary(self) -> str:
-        """Return a compact human-readable summary of this step."""
         lines = [f"Step {self.step}:"]
         lines.append("  Observations:")
         for ax in self.axioms:
-            val = "on/True" if ax.expected_value else "off/False"
+            val = "off/0V/low (faulty)" if ax.expected_value else "on/12V/high (normal)"
             lines.append(f"    {ax.observable} = {val}")
+       
         lines.append(
             f"  Worlds: {len(self.worlds_before)} → {len(self.worlds_after)} "
             f"({len(self.pruned_worlds)} pruned)"
         )
         if self.is_contradiction:
-            lines.append("CONTRADICTION: no worlds survive.")
+            lines.append("  CONTRADICTION: no worlds survive.")
         elif self.is_resolved:
-            lines.append(f"Suspected faulty component(s) = {self.surviving_faults[0]}")
+            label = " + ".join(sorted(self.surviving_faults[0])) or "all-ok"
+            lines.append(f"  Suspected faulty component(s) = {label}")
         else:
-            faults = [f or "all-ok" for f in self.surviving_faults]
-            lines.append(f"  ?  Remaining candidates: {faults}")
+            labels = [" + ".join(sorted(fs)) or "all-ok" for fs in self.surviving_faults]
+            lines.append(f"  Remaining candidates: {labels}")
         return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # AnnouncementProcessor
-# ─────────────────────────────────────────────────────────────────────────────
 
 class AnnouncementProcessor:
     """
@@ -85,18 +69,6 @@ class AnnouncementProcessor:
       After announcing phi, the model M becomes M|phi where
         W' = { w in W | M, w |= phi }
       i.e. all worlds where phi is false are eliminated.
-
-    Since our circuit is fully deterministic, phi is a conjunction of
-    ground observations (NODE = value), so a world either satisfies all
-    of them or it does not.
-
-    Parameters
-    ----------
-    kripke   : KripkeModel  — the initial epistemic state (all worlds alive)
-    engine   : AxiomEngine  — checks worlds against axioms
-    scenario : Scenario     — the scenario to run (provides agent + announcements)
-    validate : bool         — if True, raise ValueError for unobservable axioms
-                              (default True; set False to skip validation)
     """
 
     def __init__(
@@ -116,70 +88,47 @@ class AnnouncementProcessor:
     # ── Public API ────────────────────────────────────────────────────────
 
     def run(self) -> list[StepResult]:
-        """
-        Process all announcement steps in the scenario in order.
-        Stops early if a contradiction is reached (no worlds survive).
-
-        Returns
-        -------
-        list[StepResult] — one entry per processed step.
-        """
         self._results = []
-
         for announcement in self.scenario.announcements:
             result = self._process_step(announcement)
             self._results.append(result)
-
-            # Early exit on contradiction — further announcements are vacuous
             if result.is_contradiction:
                 break
-
         return self._results
 
     @property
     def results(self) -> list[StepResult]:
-        """The step results from the last run() call."""
         return self._results
 
     def final_result(self) -> StepResult | None:
-        """The last StepResult produced, or None if run() has not been called."""
         return self._results[-1] if self._results else None
 
-    # ── Core step processing ──────────────────────────────────────────────
-
     def _process_step(self, announcement: Announcement) -> StepResult:
-        """
-        Apply one announcement to the Kripke model:
-          1. Optionally validate axioms against the agent's observable set.
-          2. Record worlds alive before the update.
-          3. For each alive world, check all axioms; mark violating worlds dead.
-          4. Update the agent's accessibility relation.
-          5. Return a StepResult.
-        """
         axioms = announcement.observations
 
-        # 1. Validate observability
+        # validate observability
         if self.validate:
             self.engine.validate_announcement_for_agent(axioms, self.agent)
 
-        # 2. Snapshot of alive worlds before pruning
+        # show alive worlds before pruning
         worlds_before = [w for w in self.kripke.worlds if w.alive]
 
-        # 3. Prune worlds that violate any axiom
+        # prune worlds that violate any axiom
         pruned: list[World] = []
         for world in worlds_before:
             if not all(self.engine.world_satisfies_axiom(world, ax) for ax in axioms):
                 world.alive = False
                 pruned.append(world)
 
-        # 4. Update accessibility relation for the agent
+        # update accessibility relation for the agent
         surviving_names = {w.name for w in self.kripke.worlds if w.alive}
         if self.agent in self.kripke.accessibility:
             self.kripke.accessibility[self.agent] = surviving_names
 
-        # 5. Collect surviving worlds and build result
+        # review surviving worlds and show result
         worlds_after = [w for w in self.kripke.worlds if w.alive]
-        surviving_faults = [w.fault_node for w in worlds_after]
+
+        surviving_faults = [w.fault_nodes for w in worlds_after]
 
         return StepResult(
             step=announcement.step,

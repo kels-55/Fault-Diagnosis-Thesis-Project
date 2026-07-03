@@ -1,30 +1,17 @@
-# translator.py
-# Translates an EpistemicModel into a KripkeModel and provides an AxiomEngine
-# for checking worlds against announcement axioms.
-#
-# Usage:
-#   from translator import build_kripke_model, AxiomEngine
-#   kripke = build_kripke_model(model)
-#   engine = AxiomEngine(model)
+# translates an EpistemicModel into a KripkeModel and provides an AxiomEngine.
 
 from __future__ import annotations
 from graphlib import TopologicalSorter
+from itertools import chain, combinations
 from classes import (
     EpistemicModel, Relationship,
     World, KripkeModel,
     Axiom,
 )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Formula evaluator
-# ─────────────────────────────────────────────────────────────────────────────
+# formula evaluator
 
 def _split_args(inner: str) -> list[str]:
-    """
-    Split a comma-separated argument string while respecting nested parentheses.
-    e.g. "NOT(F_a), V_0, NOT(F_b)" -> ["NOT(F_a)", "V_0", "NOT(F_b)"]
-    """
     args = []
     depth = 0
     current: list[str] = []
@@ -44,138 +31,101 @@ def _split_args(inner: str) -> list[str]:
         args.append("".join(current).strip())
     return args
 
-
 def _evaluate_formula(formula: str, values: dict[str, bool]) -> bool:
-    """
-    Recursively evaluate a formula string against a dict of node -> bool values.
-
-    Supported operators (case-insensitive):
-      AND(a, b, ...)   - true iff all arguments are true
-      OR(a, b, ...)    - true iff at least one argument is true
-      NOT(a)           - negation
-      bare node name   - looked up directly in values
-    """
     formula = formula.strip()
     upper = formula.upper()
-
     if upper.startswith("AND(") and formula.endswith(")"):
         return all(_evaluate_formula(a, values) for a in _split_args(formula[4:-1]))
-
     if upper.startswith("OR(") and formula.endswith(")"):
         return any(_evaluate_formula(a, values) for a in _split_args(formula[3:-1]))
-
     if upper.startswith("NOT(") and formula.endswith(")"):
         return not _evaluate_formula(formula[4:-1], values)
-
     if formula in values:
         return values[formula]
-
     raise ValueError(
         f"Cannot evaluate formula fragment '{formula}'. "
         f"Known nodes: {list(values.keys())}"
     )
 
+# Powerset helper
 
-# ─────────────────────────────────────────────────────────────────────────────
-# World computation
-# ─────────────────────────────────────────────────────────────────────────────
+def _powerset(iterable, max_size: int):
+    """
+    Yield all subsets of iterable with size 0 .. max_size (inclusive).
+    e.g. _powerset([A, B, C], 2) → (), (A,), (B,), (C,), (A,B), (A,C), (B,C)
+    """
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(max_size + 1))
+
+# compute worlds
 
 def _compute_world(
-    fault_node_name: str | None,
+    active_faults: frozenset[str],  
     fault_names: list[str],
     topo_order: list,
     rel_map: dict[str, Relationship],
 ) -> World:
     """
-    Build one World for the hypothesis that fault_node_name is the active fault
-    (or None for the all-ok world).
+    Build one World for the hypothesis that exactly the faults in
+    active_faults are simultaneously active (empty set = all-ok).
 
-    Steps:
-      1. Set fault_assignment: exactly one fault True (or all False for all-ok).
-      2. Walk non-fault nodes in topological order, evaluating each formula.
-      3. Return the completed World (possible_worlds populated separately).
+    The fault_assignment sets every fault in active_faults to True,
+    all others to False.  Derived nodes are then evaluated in
+    topological order using the circuit formulas.
     """
-    # 1. Fault assignment
     fault_assignment: dict[str, bool] = {
-        f: (f == fault_node_name) for f in fault_names
+        f: (f in active_faults) for f in fault_names
     }
 
-    # 2. Evaluate derived nodes in topological order
     values: dict[str, bool] = dict(fault_assignment)
     derived: dict[str, bool] = {}
 
     for node in topo_order:
         if node.name not in rel_map:
-            derived[node.name] = False
-            values[node.name] = False
-            continue
+            raise ValueError(
+                f"Node '{node.name}' (kind='{node.kind}') has no relationship "
+                f"defined in the circuit model. Add a 'relationships:' entry "
+                f"with a formula for this node, or remove it from the node list."
+            )
         rel = rel_map[node.name]
         result = _evaluate_formula(rel.formula, values)
         derived[node.name] = result
         values[node.name] = result
 
-    world_name = f"w_{fault_node_name}" if fault_node_name else "w_all_ok"
+    # Name: "w_all_ok", "w_F_battery", or "w_F_PSU_short+F_battery"
+    if not active_faults:
+        world_name = "w_all_ok"
+    else:
+        world_name = "w_" + "+".join(sorted(active_faults))
+
     return World(
         name=world_name,
-        fault_node=fault_node_name,
+        fault_nodes=active_faults,
         fault_assignment=fault_assignment,
         derived=derived,
         alive=True,
-        possible_worlds=set(),   # populated by _wire_possible_worlds()
+        possible_worlds=set(),
     )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Possible-world wiring (◇ accessibility)
-# ─────────────────────────────────────────────────────────────────────────────
 
-def _wire_possible_worlds(
-    worlds: list[World],
-    model: EpistemicModel,
-) -> None:
-    """
-    Populate World.possible_worlds for every world based on the
-    PossibleDependency entries in the model.
-
-    For each PossibleDependency D and each world W:
-      If D.condition holds in W (i.e. D.condition_node = D.condition_value),
-      then every world W' where D.dependent_node = D.possible_value is
-      ◇-reachable from W.
-
-    This encodes:
-      "In world W, it is physically possible that D.dependent_node is
-       D.possible_value" — i.e. W can 'see' all such W' via ◇.
-
-    Example with F_PSU_short → ◇ F_battery:
-      In w_F_PSU_short (where F_PSU_short = True), the world w_F_battery
-      (where F_battery = True) is ◇-accessible because a PSU short makes
-      battery exhaustion possible.
-    """
-    world_map: dict[str, World] = {w.name: w for w in worlds}
-
+def _wire_possible_worlds(worlds: list[World], model: EpistemicModel) -> None:
     for dep in model.possible_dependencies:
         for world in worlds:
-            # Check if the condition holds in this world
             if not dep.is_triggered(world):
                 continue
-            # Add all worlds where the dependent node has the possible value
             for other in worlds:
                 if other.value_of(dep.dependent_node.name) == dep.possible_value:
                     world.possible_worlds.add(other.name)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Topological sort helper
-# ─────────────────────────────────────────────────────────────────────────────
+# Topological sort helper (unchanged)
 
 def _topo_order(model: EpistemicModel) -> list:
-    """Return all non-fault nodes in topological (parents-before-children) order."""
     node_map = {n.name: n for n in model.nodes}
     deps: dict[str, set[str]] = {n.name: set() for n in model.nodes}
     for rel in model.relationships:
         for parent in rel.parents:
             deps[rel.child.name].add(parent.name)
-
     ts = TopologicalSorter(deps)
     return [
         node_map[name]
@@ -183,33 +133,26 @@ def _topo_order(model: EpistemicModel) -> list:
         if node_map[name].kind != "fault"
     ]
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Public: build_kripke_model
-# ─────────────────────────────────────────────────────────────────────────────
 
 def build_kripke_model(
     model: EpistemicModel,
     include_all_ok: bool = False,
+    max_faults: int = 1,
 ) -> KripkeModel:
     """
     Translate an EpistemicModel into an initial KripkeModel.
 
-    One world is created per fault node (the "exactly one fault" assumption).
-    Optionally an all-ok world (no fault active) can be included.
-
-    Two relations are established:
-      □ (epistemic accessibility): initially all worlds accessible to every
-        agent — total ignorance (S5). Shrinks after each announcement.
-      ◇ (possible dependency):     World.possible_worlds, fixed at construction.
-        Encodes physical possibility from PossibleDependency entries, e.g.
-        w_F_PSU_short can ◇-reach w_F_battery because a short can drain
-        the battery.
-
     Parameters
     ----------
     model          : EpistemicModel populated by loader.py
-    include_all_ok : if True, add a world where no fault is active
+    include_all_ok : if True, include the zero-fault world
+    max_faults     : maximum number of simultaneous active faults per world.
+                     1 = original single-fault behaviour (default).
+                     2 = also generate all pairs of faults, etc.
+
+    World count grows as sum(C(n,k) for k in 1..max_faults).
+    For n=20 faults: max_faults=1 → 20 worlds, =2 → 210, =3 → 1,350.
     """
     fault_names = [n.name for n in model.fault_nodes()]
     topo = _topo_order(model)
@@ -219,16 +162,16 @@ def build_kripke_model(
 
     worlds: list[World] = []
 
-    for fault_name in fault_names:
-        worlds.append(_compute_world(fault_name, fault_names, topo, rel_map))
+    # generate all fault subsets 
+    for subset in _powerset(fault_names, max_faults):
+        if len(subset) == 0:
+            if include_all_ok:
+                worlds.append(_compute_world(frozenset(), fault_names, topo, rel_map))
+        else:
+            worlds.append(_compute_world(frozenset(subset), fault_names, topo, rel_map))
 
-    if include_all_ok:
-        worlds.append(_compute_world(None, fault_names, topo, rel_map))
-
-    # Wire ◇ accessibility from PossibleDependency entries
     _wire_possible_worlds(worlds, model)
 
-    # Initial □ accessibility: all worlds accessible to every agent
     all_world_names = {w.name for w in worlds}
     accessibility: dict[str, set[str]] = {
         agent.name: set(all_world_names) for agent in model.agents
@@ -236,17 +179,9 @@ def build_kripke_model(
 
     return KripkeModel(worlds=worlds, accessibility=accessibility)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Public: AxiomEngine
-# ─────────────────────────────────────────────────────────────────────────────
+# Public: AxiomEngine 
 
 class AxiomEngine:
-    """
-    Checks whether a World satisfies an Axiom, and validates that axioms
-    only reference nodes the agent can actually observe.
-    """
-
     def __init__(self, model: EpistemicModel):
         self.model = model
         self._agent_observables: dict[str, set[str]] = {
@@ -255,37 +190,22 @@ class AxiomEngine:
         }
 
     def world_satisfies_axiom(self, world: World, axiom: Axiom) -> bool:
-        """Return True iff world's value for axiom.observable == axiom.expected_value."""
         actual = world.value_of(axiom.observable)
         return actual == axiom.expected_value
 
     def validate_axiom_for_agent(self, axiom: Axiom, agent_name: str) -> None:
-        """Raise ValueError if the agent cannot observe the axiom's node."""
         observables = self._agent_observables.get(agent_name, set())
         if axiom.observable not in observables:
             raise ValueError(
                 f"Agent '{agent_name}' cannot observe '{axiom.observable}'. "
-                f"Observable nodes for this agent: {sorted(observables)}"
+                f"Observable nodes: {sorted(observables)}"
             )
 
-    def validate_announcement_for_agent(
-        self,
-        axioms: list[Axiom],
-        agent_name: str,
-    ) -> None:
-        """Validate all axioms in an announcement for the given agent."""
+    def validate_announcement_for_agent(self, axioms: list[Axiom], agent_name: str) -> None:
         for axiom in axioms:
             self.validate_axiom_for_agent(axiom, agent_name)
 
-    def filter_worlds(
-        self,
-        worlds: list[World],
-        axioms: list[Axiom],
-    ) -> list[World]:
-        """
-        Return only those worlds satisfying ALL axioms.
-        Does not mutate world.alive — that is the announcer's responsibility.
-        """
+    def filter_worlds(self, worlds: list[World], axioms: list[Axiom]) -> list[World]:
         return [
             w for w in worlds
             if all(self.world_satisfies_axiom(w, ax) for ax in axioms)

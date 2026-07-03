@@ -71,53 +71,52 @@ relationships:
   - child:   V_0
     parents: [F_PSU_short, F_battery]
     type:    deterministic
-    # Active iff PSU is not shorted AND battery is not exhausted
-    formula: "AND(NOT(F_PSU_short), NOT(F_battery))"
+    formula: "OR(F_PSU_short, F_battery)"
 
   - child:   V_1
     parents: [V_0, F_cable_1, F_sw_1]
     type:    deterministic
-    formula: "AND(V_0, NOT(F_cable_1), NOT(F_sw_1))"
+    formula: "OR(V_0, F_cable_1, F_sw_1)"
 
   - child:   V_2
     parents: [V_1, F_cable_2, F_sw_2]
     type:    deterministic
-    formula: "AND(V_1, NOT(F_cable_2), NOT(F_sw_2))"
+    formula: "OR(V_1, F_cable_2, F_sw_2)"
 
   - child:   V_3
     parents: [V_2, F_cable_3, F_sw_3]
     type:    deterministic
-    formula: "AND(V_2, NOT(F_cable_3), NOT(F_sw_3))"
+    formula: "OR(V_2, F_cable_3, F_sw_3)"
 
   - child:   V_4
     parents: [V_3, F_cable_4, F_sw_4]
     type:    deterministic
-    formula: "AND(V_3, NOT(F_cable_4), NOT(F_sw_4))"
+    formula: "OR(V_3, F_cable_4, F_sw_4)"
 
   - child:   V_5
     parents: [V_4, F_cable_5, F_sw_5]
     type:    deterministic
-    formula: "AND(V_4, NOT(F_cable_5), NOT(F_sw_5))"
+    formula: "OR(V_4, F_cable_5, F_sw_5)"
 
   - child:   V_6
     parents: [V_5, F_cable_6, F_sw_6]
     type:    deterministic
-    formula: "AND(V_5, NOT(F_cable_6), NOT(F_sw_6))"
+    formula: "OR(V_5, F_cable_6, F_sw_6)"
 
   - child:   V_7
     parents: [V_6, F_cable_7, F_sw_7]
     type:    deterministic
-    formula: "AND(V_6, NOT(F_cable_7), NOT(F_sw_7))"
+    formula: "OR(V_6, F_cable_7, F_sw_7)"
 
   - child:   V_8
     parents: [V_7, F_cable_8, F_sw_8]
     type:    deterministic
-    formula: "AND(V_7, NOT(F_cable_8), NOT(F_sw_8))"
+    formula: "OR(V_7, F_cable_8, F_sw_8)"
 
   - child:   O_PSU_LED
     parents: [F_battery]
     type:    deterministic
-    formula: "NOT(F_battery)"
+    formula: "F_battery"
 
   - child:   O_Ind_1
     parents: [V_1]
@@ -162,22 +161,22 @@ relationships:
   - child:   O_Lamp
     parents: [V_8, F_cable_load, F_lamp]
     type:    deterministic
-    formula: "AND(V_8, NOT(F_cable_load), NOT(F_lamp))"
+    formula: "OR(V_8, F_cable_load, F_lamp)"
 
   - child:   O_Lamp_indicator
     parents: [V_8, F_cable_load]
     type:    deterministic
-    formula: "AND(V_8, NOT(F_cable_load))"
+    formula: "OR(V_8, F_cable_load)"
 
   - child:   M_PSU_short
     parents: [F_PSU_short]
     type:    deterministic
-    formula: "NOT(F_PSU_short)"
+    formula: "F_PSU_short"
 
   - child:   M_battery
     parents: [F_battery]
     type:    deterministic
-    formula: "NOT(F_battery)"
+    formula: "F_battery"
 
   - child:   M_mod_1
     parents: [V_1]
@@ -219,14 +218,11 @@ relationships:
     type:    deterministic
     formula: "V_8"
 
-possible_dependencies:
-  - condition_node: F_PSU_short
+  - child:           F_battery
+    parents:         [F_PSU_short]
+    type:            possible
     condition_value: true
-    dependent_node: F_battery
-    possible_value: true
-    note: >
-      A PSU short can violently discharge the battery (scenario 14 mechanism).
-      Battery exhaustion is possible given a PSU short, but not necessary.
+    possible_value:  true
 
 agents:
 
@@ -270,7 +266,6 @@ agents:
       - M_mod_7
       - M_mod_8
 
-# ─────────────────────────────────────────────────────────────────────────────
 # SCENARIOS
 #
 # Each scenario has:
@@ -283,9 +278,6 @@ agents:
 #       on / off          for O_* nodes
 #       12V / 0V          for M_battery, M_mod_N
 #       high / low        for M_PSU_short
-#
-# The loader normalises all announcement keys to announcement_N (integer N).
-# ─────────────────────────────────────────────────────────────────────────────
 
 scenarios:
   - id: 7
@@ -395,6 +387,7 @@ scenarios:
   - id: 14
     description: "PSU short – battery discharged by short circuit"
     tools_in_hand: [multimeter]
+    max_faults: 2
     announcements:
       - step: 1
         observations:
@@ -424,3 +417,35 @@ scenarios:
           - "O_Lamp = off"
           - "O_Lamp_indicator = off"
 
+
+  - id: 15
+    description: ""
+    tools_in_hand: [multimeter]
+    announcements:
+      - step: 1
+        observations:
+          - "O_PSU_LED = on"
+          - "M_PSU_short = high"
+          - "M_battery = 12V"
+          - "M_mod_1 = 12V"
+          - "M_mod_2 = 12V"
+          - "M_mod_3 = 12V"
+          - "M_mod_4 = 12V"
+          - "M_mod_5 = 12V"
+          - "M_mod_6 = 12V"
+          - "M_mod_7 = 12V"
+          - "M_mod_8 = 12V"
+      - step: 2
+        observations:
+          - "O_Ind_1 = on"
+          - "O_Ind_2 = on"
+          - "O_Ind_3 = on"
+          - "O_Ind_4 = on"
+          - "O_Ind_5 = on"
+          - "O_Ind_6 = on"
+          - "O_Ind_7 = on"
+          - "O_Ind_8 = on"
+      - step: 3
+        observations:
+          - "O_Lamp = off"
+          - "O_Lamp_indicator = off"
