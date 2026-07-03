@@ -2,6 +2,11 @@
 
 This github repository shows the implementation of using dynamic epistemic logic (DEL) in fault diagnosis of a toy example of an electrical circuit. It is an illustration as a part of the thesis project for 'Dynamic Epistemic Logic in Fault Diagnosis in Cyber-Physical Systems'. The results of this DEL implementation is compared to a Bayesian Network baseline model as a shared project, which can be found here: https://github.com/marcusgitz/Thesis-fault-diagnosis-BN. The electrical circuit system and fault scenarios can be found here: https://github.com/kataph/Diagnostic-Assistant-Demo.
 
+To see an overview of how the system works, start with:
+```
+usage.ipynb
+```
+
 ## System Structure
 
 ```
